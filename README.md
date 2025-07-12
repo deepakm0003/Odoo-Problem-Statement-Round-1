@@ -96,11 +96,6 @@ Our platform empowers individuals to contribute to a greener planet by encouragi
 
 ---
 
-## 📄 License
-MIT License – free to use and modify.
-
----
-
 ## 🙌 Acknowledgements
 Thanks to the hackathon organizers and mentor Bhil Nayanaben Bhagvanbahi for the opportunity and support!
 
