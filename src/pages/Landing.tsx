@@ -265,7 +265,7 @@ export default function Landing() {
             </p>
             <div className="flex flex-col sm:flex-row justify-center gap-4">
               <Link to="/register">
-                <Button className="bg-white text-emerald-600 hover:bg-gray-50 w-full sm:w-auto">
+                <Button className="bg-white text-black hover:bg-gray-50 w-full sm:w-auto">
                   Get Started Today
                 </Button>
               </Link>
