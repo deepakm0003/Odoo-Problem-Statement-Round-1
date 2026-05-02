@@ -1,117 +1,92 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { localAuth, LocalUser } from '../lib/localAuth';
-import { User } from '../types';
+import React, { createContext, useContext, useState, ReactNode, FC } from 'react';
 
-interface AuthContextType {
-  user: User | null;
-  loading: boolean;
-  signUp: (email: string, password: string, name: string) => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
-  signOut: () => Promise<void>;
-  updateProfile: (data: Partial<User>) => Promise<void>;
-  downloadUserData: () => void;
+/**
+ * Types
+ */
+export interface User {
+  id: string;
+  name: string;
+  email: string;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+interface AuthContextProps {
+  /** Currently authenticated user or null if not logged in */
+  user: User | null;
+  /** Attempts to log in a user using the backend API */
+  login: (username: string, password: string) => Promise<void>;
+  /** Logs out the current user */
+  logout: () => void;
+}
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+/**
+ * Create a React context with a default value that will be overridden by the provider.
+ * The default throws an error if used outside of a provider – this helps catch
+ * misuse during development.
+ */
+const AuthContext = createContext<AuthContextProps | undefined>(undefined);
+
+/**
+ * AuthProvider component – wraps part of the app that needs authentication state.
+ * It keeps the authenticated user in component state (memory only). No data is stored
+ * in localStorage or any other persistent client‑side storage, which avoids the
+ * security issues present in the previous implementation.
+ */
+export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // Check for existing user session
-    const currentUser = localAuth.getCurrentUser();
-    if (currentUser) {
-      setUser(convertLocalUserToUser(currentUser));
-    }
-    setLoading(false);
+  /**
+   * Login implementation.
+   * Calls a backend endpoint (e.g., /api/login) that validates credentials and
+   * returns the user payload. The backend should set an HttpOnly, Secure cookie
+   * containing the session token, keeping the token out of JavaScript scope.
+   */
+  const login = async (username: string, password: string): Promise<void> => {
+    const response = await fetch('/api/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ username, password }),
+      credentials: 'include', // ensures cookies are sent/received
+    });
 
-    // Create demo user if no users exist
-    if (localAuth.getAllUsers().length === 0) {
-      localAuth.createDemoUser();
-    }
-  }, []);
-
-  function convertLocalUserToUser(localUser: LocalUser): User {
-    return {
-      id: localUser.id,
-      email: localUser.email,
-      name: localUser.name,
-      avatar_url: localUser.avatar_url,
-      points: localUser.points,
-      created_at: localUser.created_at,
-      updated_at: localUser.updated_at
-    };
-  }
-
-  async function signUp(email: string, password: string, name: string) {
-    const { user: newUser, error } = await localAuth.signUp(email, password, name);
-    
-    if (error) {
-      throw new Error(error);
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(error || 'Login failed');
     }
 
-    if (newUser) {
-      setUser(convertLocalUserToUser(newUser));
-    }
-  }
+    const data: User = await response.json();
+    setUser(data);
+  };
 
-  async function signIn(email: string, password: string) {
-    const { user: localUser, error } = await localAuth.signIn(email, password);
-    
-    if (error) {
-      throw new Error(error);
-    }
-
-    if (localUser) {
-      setUser(convertLocalUserToUser(localUser));
-    }
-  }
-
-  async function signOut() {
-    await localAuth.signOut();
+  /**
+   * Logout implementation.
+   * Calls a backend endpoint to clear the session cookie and then clears the
+   * client‑side user state.
+   */
+  const logout = async (): Promise<void> => {
+    await fetch('/api/logout', {
+      method: 'POST',
+      credentials: 'include',
+    });
     setUser(null);
-  }
-
-  async function updateProfile(data: Partial<User>) {
-    if (!user) throw new Error('No user logged in');
-
-    const { user: updatedUser, error } = await localAuth.updateUser(user.id, data);
-    
-    if (error) {
-      throw new Error(error);
-    }
-
-    if (updatedUser) {
-      setUser(convertLocalUserToUser(updatedUser));
-    }
-  }
-
-  function downloadUserData() {
-    localAuth.downloadUserData();
-  }
-
-  const value = {
-    user,
-    loading,
-    signUp,
-    signIn,
-    signOut,
-    updateProfile,
-    downloadUserData,
   };
 
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={{ user, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
-}
+};
 
-export function useAuth() {
+/**
+ * Custom hook for consuming the AuthContext.
+ * Throws an error if used outside of an AuthProvider.
+ */
+export const useAuth = (): AuthContextProps => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-}
+};
